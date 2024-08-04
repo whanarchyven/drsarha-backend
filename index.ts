@@ -22,15 +22,38 @@ async function init() {
                     secret: secretKey
                 })
             )
+            .post('/create-payment', async ({body}) => {
+                const paymentCollection = db.collection('payments')
+                const payment: any = await paymentCollection.insertOne({...body});
+                return {message: 'Payment created.', payment: payment};
+            })
+            .get('/get-payment/:email', async ({params: {email}}) => {
+                const payment = await db.collection('payments').findOne({description: email})
+                if (payment) {
+                    return {payment}
+                }
+            })
             .post('/register', async ({body}) => {
                 const usersCollection = db.collection('users')
                 const {email, password, phone} = body;
                 const hashedPassword = await Bun.password.hash(password, {algorithm: 'bcrypt'});
 
+                // Get the current date
+                const currentDate = new Date();
+
+                const oneMonthAhead = new Date(currentDate);
+
+                oneMonthAhead.setMonth(currentDate.getMonth() + 1);
+
+                if (oneMonthAhead.getDate() < currentDate.getDate()) {
+                    oneMonthAhead.setDate(0);
+                }
+
                 const user = await usersCollection.insertOne({
                     email,
                     phone,
                     password: hashedPassword,
+                    subscribeTill: oneMonthAhead.toISOString()
                 });
 
                 return {message: 'User registered successfully', userId: user.insertedId};
@@ -97,12 +120,26 @@ async function init() {
                 console.log(body, {...body})
 
                 if (body.password) {
-                    const hashedPassword = await Bun.password.hash(body.password, {algorithm: 'bcrypt'});
-                    console.log(hashedPassword)
+
+                    const usersCollection = db.collection('users');
+
+                    const newPassword = body.password;
+
+                    // Hash the new password
+                    const hashedNewPassword = await Bun.password.hash(newPassword, {algorithm: 'bcrypt'});
+
+                    // Update the user's password in the database
+                    // await usersCollection.findOneAndUpdate(
+                    //     {_id: new ObjectId(user.userId)},
+                    //     {
+                    //         $set: {
+                    //             password: hashedNewPassword,
+                    //         },
+                    //     }
+                    // );
                     const userUpdate = await usersCollection.findOneAndUpdate({_id: new ObjectId(user.userId)}, {
                         $set: {
-                            ...body,
-                            password: hashedPassword
+                            ...body,password:hashedNewPassword
                         }
                     });
                     return {message: 'User info updated successfully', user: userUpdate};

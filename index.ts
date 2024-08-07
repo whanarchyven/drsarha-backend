@@ -29,13 +29,24 @@ async function init() {
             })
             .get('/get-payment/:email', async ({params: {email}}) => {
                 const payment = await db.collection('payments').findOne({description: email})
-                if (payment) {
+                const user = await db.collection('users').findOne({email: email})
+                if (payment&&!user) {
                     return {payment}
                 }
+                else{
+                    return {message:'User already exists'}
+                }
+            })
+            .post('/update-payment/:id', async ({body, params: {id}}) => {
+                const paymentCollection = db.collection('payments')
+                const payment: any = await paymentCollection.findOneAndUpdate({id: id}, {$set: {...body}});
+                console.log(payment, body, id)
+                return {message: 'Payment created.', payment: payment};
             })
             .post('/register', async ({body}) => {
                 const usersCollection = db.collection('users')
                 const {email, password, phone} = body;
+                const {plan}=body
                 const hashedPassword = await Bun.password.hash(password, {algorithm: 'bcrypt'});
 
                 // Get the current date
@@ -49,11 +60,22 @@ async function init() {
                     oneMonthAhead.setDate(0);
                 }
 
+
+                const currentDateYear = new Date();
+
+                const oneYearAhead = new Date(currentDate);
+
+                oneYearAhead.setMonth(currentDateYear.getMonth() + 1);
+
+                if (oneYearAhead.getDate() < currentDateYear.getDate()) {
+                    oneYearAhead.setDate(0);
+                }
+
                 const user = await usersCollection.insertOne({
                     email,
                     phone,
                     password: hashedPassword,
-                    subscribeTill: oneMonthAhead.toISOString()
+                    subscribeTill: plan=='year'?oneYearAhead.toISOString():oneMonthAhead.toISOString()
                 });
 
                 return {message: 'User registered successfully', userId: user.insertedId};
@@ -139,7 +161,7 @@ async function init() {
                     // );
                     const userUpdate = await usersCollection.findOneAndUpdate({_id: new ObjectId(user.userId)}, {
                         $set: {
-                            ...body,password:hashedNewPassword
+                            ...body, password: hashedNewPassword
                         }
                     });
                     return {message: 'User info updated successfully', user: userUpdate};
